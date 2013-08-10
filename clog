@@ -3,7 +3,7 @@
 sdate=${1}
 cdate=`date +"%m_%d_%Y"`
 rdir=`pwd`
-logdir=$MK_CHANGELOG_PATH
+logdir=$KYLIN_CHANGELOG_PATH
 if ["$MK_CHANGELOG_PATH" = ""]; then
 logdir=`pwd`
 fi
@@ -25,10 +25,10 @@ fi
 
 # Find the directories to log
 echo"";echo"";echo""
-echo "Mokee Open Source Changelog -------------------"
+echo "KyLin OS Changelog -------------------"
 echo""
 # Log starter
-echo "Mokee Open Source Changelog from $sdate" - today >> "$logdir"/Changelog_$cdate.log
+echo "KyLin OS Changelog from $sdate" - today >> "$logdir"/Changelog_$cdate.log
 echo "---------------------------------------------------------------" >> "$logdir"/Changelog_$cdate.log
 echo " " >> "$logdir"/Changelog_$cdate.log
 find $rdir -name .git | sed 's/\/.git//g' | sed 'N;$!P;$!D;$d' | while read line

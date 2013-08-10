@@ -172,7 +172,7 @@ $(INSTALLED_BUILD_PROP_TARGET): $(BUILDINFO_SH) $(INTERNAL_BUILD_ID_MAKEFILE) $(
 	@mkdir -p $(dir $@)
 	$(hide) TARGET_BUILD_TYPE="$(TARGET_BUILD_VARIANT)" \
 			TARGET_DEVICE="$(TARGET_DEVICE)" \
-			MK_DEVICE="$(TARGET_DEVICE)" \
+			KYLIN_DEVICE="$(TARGET_DEVICE)" \
 			PRODUCT_NAME="$(TARGET_PRODUCT)" \
 			PRODUCT_BRAND="$(PRODUCT_BRAND)" \
 			PRODUCT_DEFAULT_LANGUAGE="$(call default-locale-language,$(PRODUCT_LOCALES))" \
@@ -881,7 +881,7 @@ SYSTEMIMAGE_SOURCE_DIR := $(TARGET_OUT)
 ifneq ($(INSTALLED_RECOVERYIMAGE_TARGET),)
 intermediates := $(call intermediates-dir-for,PACKAGING,recovery_patch)
 ifndef BOARD_CUSTOM_BOOTIMG_MK
-ifeq ($(MK_BUILD),)
+ifeq ($(KYLIN_BUILD),)
 RECOVERY_FROM_BOOT_PATCH := $(intermediates)/recovery_from_boot.p
 else
 RECOVERY_FROM_BOOT_PATCH :=
@@ -1316,7 +1316,7 @@ else
     OTA_FROM_TARGET_SCRIPT := $(TARGET_RELEASETOOL_OTA_FROM_TARGET_SCRIPT)
 endif
 
-ifneq ($(MK_BUILD),)
+ifneq ($(KYLIN_BUILD),)
     $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := true
 else
     $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := false
@@ -1346,28 +1346,28 @@ bacon: otapackage
 ifneq ($(TARGET_CUSTOM_RELEASETOOL),)
 	$(error TARGET_CUSTOM_RELEASETOOL is deprecated)
 endif
-	$(hide) ln -f $(INTERNAL_OTA_PACKAGE_TARGET) $(MK_TARGET_PACKAGE)
-	$(hide) $(MD5SUM) $(MK_TARGET_PACKAGE) > $(MK_TARGET_PACKAGE).md5sum
-	@echo -e ${CL_CYN}"Package Complete: $(MK_TARGET_PACKAGE)"${CL_RST}
+	$(hide) ln -f $(INTERNAL_OTA_PACKAGE_TARGET) $(KYLIN_TARGET_PACKAGE)
+	$(hide) $(MD5SUM) $(KYLIN_TARGET_PACKAGE) > $(KYLIN_TARGET_PACKAGE).md5sum
+	@echo -e ${CL_CYN}"Package Complete: $(KYLIN_TARGET_PACKAGE)"${CL_RST}
 	
 	$(hide) # Create Release, Experimental and Nightly folder Start
 
-ifdef MK_BUILD_PATH
-	$(hide) mkdir -p $(MK_BUILD_PATH)
-  ifeq "RELEASE" "$(MK_BUILDTYPE)"
-	$(hide) mkdir -p $(MK_BUILD_PATH)/Release
-	$(hide) mkdir -p $(MK_BUILD_PATH)/Release/$(MK_BUILD)
-	$(hide) cp $(MK_TARGET_PACKAGE) $(MK_BUILD_PATH)/Release/$(MK_BUILD)
+ifdef KYLIN_BUILD_PATH
+	$(hide) kldir -p $(KYLIN_BUILD_PATH)
+  ifeq "RELEASE" "$(KYLIN_BUILDTYPE)"
+	$(hide) kldir -p $(KYLIN_BUILD_PATH)/Release
+	$(hide) kldir -p $(KYLIN_BUILD_PATH)/Release/$(KYLIN_BUILD)
+	$(hide) cp $(KYLIN_TARGET_PACKAGE) $(KYLIN_BUILD_PATH)/Release/$(KYLIN_BUILD)
   endif
-  ifeq "EXPERIMENTAL" "$(MK_BUILDTYPE)"
-	$(hide) mkdir -p $(MK_BUILD_PATH)/Experimental
-	$(hide) mkdir -p $(MK_BUILD_PATH)/Experimental/$(MK_BUILD)
-	$(hide) cp $(MK_TARGET_PACKAGE) $(MK_BUILD_PATH)/Experimental/$(MK_BUILD)
+  ifeq "EXPERIMENTAL" "$(KYLIN_BUILDTYPE)"
+	$(hide) kldir -p $(KYLIN_BUILD_PATH)/Experimental
+	$(hide) kldir -p $(KYLIN_BUILD_PATH)/Experimental/$(KYLIN_BUILD)
+	$(hide) cp $(KYLIN_TARGET_PACKAGE) $(KYLIN_BUILD_PATH)/Experimental/$(KYLIN_BUILD)
   endif
-  ifeq "NIGHTLY" "$(MK_BUILDTYPE)"
-	$(hide) mkdir -p $(MK_BUILD_PATH)/Nightly
-	$(hide) mkdir -p $(MK_BUILD_PATH)/Nightly/$(MK_BUILD)
-	$(hide) cp $(MK_TARGET_PACKAGE) $(MK_BUILD_PATH)/Nightly/$(MK_BUILD)
+  ifeq "NIGHTLY" "$(KYLIN_BUILDTYPE)"
+	$(hide) kldir -p $(KYLIN_BUILD_PATH)/Nightly
+	$(hide) kldir -p $(KYLIN_BUILD_PATH)/Nightly/$(KYLIN_BUILD)
+	$(hide) cp $(KYLIN_TARGET_PACKAGE) $(KYLIN_BUILD_PATH)/Nightly/$(KYLIN_BUILD)
   endif
 endif
 	$(hide) # Create Release, Experimental and Nightly folder End

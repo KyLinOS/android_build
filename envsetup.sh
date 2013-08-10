@@ -14,13 +14,13 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - jgrep:   Greps on all local Java files.
 - resgrep: Greps on all local res/*.xml files.
 - godir:   Go to the directory containing a file.
-- mkremote: Add git remote for MoKee OpenSource Gerrit Review.
-- mkgerrit: A Git wrapper that fetches/pushes patch from/to MoKee OpenSource Gerrit Review.
-- mkrebase: Rebase a Gerrit change and push it again.
+- kylinremote: Add git remote for KyLin OS Gerrit Review.
+- kylingerrit: A Git wrapper that fetches/pushes patch from/to KyLin OS Gerrit Review.
+- kylinrebase: Rebase a Gerrit change and push it again.
 - aospremote: Add git remote for matching AOSP repository.
 - mka:      Builds using SCHED_BATCH on all processors.
 - mkap:     Builds the module(s) using mka and pushes them to the device.
-- mkka:     Cleans and builds using mka.
+- kylinka:     Cleans and builds using mka.
 - reposync: Parallel repo sync using ionice and SCHED_BATCH.
 - repopick: Utility to fetch changes from Gerrit.
 - installboot: Installs a boot.img to the connected device.
@@ -70,12 +70,12 @@ function check_product()
         return
     fi
 
-    if (echo -n $1 | grep -q -e "^mk_") ; then
-       MK_BUILD=$(echo -n $1 | sed -e 's/^mk_//g')
+    if (echo -n $1 | grep -q -e "^kylin_") ; then
+       KYLIN_BUILD=$(echo -n $1 | sed -e 's/^kylin_//g')
     else
-       MK_BUILD=
+       KYLIN_BUILD=
     fi
-    export MK_BUILD
+    export KYLIN_BUILD
 
     CALLED_FROM_SETUP=true BUILD_SYSTEM=build/core \
         TARGET_PRODUCT=$1 \
@@ -270,7 +270,7 @@ function addcompletions()
 
     local T dir f
 
-    dirs="sdk/bash_completion vendor/mk/bash_completion"
+    dirs="sdk/bash_completion vendor/kylin/bash_completion"
     for dir in $dirs; do
     if [ -d ${dir} ]; then
         for f in `/bin/ls ${dir}/[a-z]*.bash 2> /dev/null`; do
@@ -467,7 +467,7 @@ function print_lunch_menu()
        echo "  (ohai, koush!)"
     fi
     echo
-    if [ "z${MK_DEVICES_ONLY}" != "z" ]; then
+    if [ "z${KYLIN_DEVICES_ONLY}" != "z" ]; then
        echo "Breakfast menu... pick a combo:"
     else
        echo "Lunch menu... pick a combo:"
@@ -481,7 +481,7 @@ function print_lunch_menu()
         i=$(($i+1))
     done | column
 
-    if [ "z${MK_DEVICES_ONLY}" != "z" ]; then
+    if [ "z${KYLIN_DEVICES_ONLY}" != "z" ]; then
        echo "... and don't forget the bacon!"
     fi
 
@@ -503,10 +503,10 @@ function brunch()
 function breakfast()
 {
     target=$1
-    MK_DEVICES_ONLY="true"
+    KYLIN_DEVICES_ONLY="true"
     unset LUNCH_MENU_CHOICES
     add_lunch_combo full-eng
-    for f in `/bin/ls vendor/mk/vendorsetup.sh 2> /dev/null`
+    for f in `/bin/ls vendor/kylin/vendorsetup.sh 2> /dev/null`
         do
             echo "including $f"
             . $f
@@ -522,8 +522,8 @@ function breakfast()
             # A buildtype was specified, assume a full device name
             lunch $target
         else
-            # This is probably just the MK model name
-            lunch mk_$target-userdebug
+            # This is probably just the KYLIN model name
+            lunch kylin_$target-userdebug
         fi
     fi
     return $?
@@ -572,7 +572,7 @@ function lunch()
     check_product $product
     if [ $? -ne 0 ]
     then
-        # if we can't find a product, try to grab it off the MoKee github
+        # if we can't find a product, try to grab it off the KyLin OS github
         T=$(gettop)
         pushd $T > /dev/null
         build/tools/roomservice.py $product
@@ -671,7 +671,7 @@ function tapas()
 function eat()
 {
     if [ "$OUT" ] ; then
-        MODVERSION=$(get_build_var MK_VERSION)
+        MODVERSION=$(get_build_var KYLIN_VERSION)
         ZIPFILE=$MODVERSION.zip
         ZIPPATH=$OUT/$ZIPFILE
         if [ ! -f $ZIPPATH ] ; then
@@ -687,7 +687,7 @@ function eat()
             done
             echo "Device Found.."
         fi
-    if (adb shell cat /system/build.prop | grep -q "ro.mk.device=$MK_BUILD");
+    if (adb shell cat /system/build.prop | grep -q "ro.kl.device=$KL_BUILD");
     then
         # if adbd isn't root we can't write to /cache/recovery/
         adb root
@@ -709,7 +709,7 @@ EOF
     fi
     return $?
     else
-        echo "The connected device does not appear to be $MK_BUILD, run away!"
+        echo "The connected device does not appear to be $KYLIN_BUILD, run away!"
     fi
 }
 
@@ -1296,9 +1296,9 @@ function godir () {
     cd $T/$pathname
 }
 
-function mkremote()
+function kylinremote()
 {
-    git remote rm mkremote 2> /dev/null
+    git remote rm kylinremote 2> /dev/null
     if [ ! -d .git ]
     then
         echo .git directory not found. Please run this from the root directory of the Android repository you wish to set up.
@@ -1313,16 +1313,16 @@ function mkremote()
           return 0
         fi
     fi
-    MKUSER=`git config --get review.review.mfunz.com.username`
-    if [ -z "$MKUSER" ]
+    KYLINUSER=`git config --get review.review.kylinos.com.username`
+    if [ -z "$KYLINUSER" ]
     then
-        git remote add mkremote ssh://review.mfunz.com:29418/$GERRIT_REMOTE
+        git remote add kylinremote ssh://review.kylinos.com:29418/$GERRIT_REMOTE
     else
-        git remote add mkremote ssh://$MKUSER@review.mfunz.com:29418/$GERRIT_REMOTE
+        git remote add kylinremote ssh://$KYLINUSER@review.kylinos.com:29418/$GERRIT_REMOTE
     fi
-    echo You can now push to "mkremote".
+    echo You can now push to "kylinremote".
 }
-export -f mkremote
+export -f kylinremote
 
 function aospremote()
 {
@@ -1365,7 +1365,7 @@ function installboot()
     sleep 1
     adb wait-for-online shell mount /system 2>&1 > /dev/null
     adb wait-for-online remount
-    if (adb shell cat /system/build.prop | grep -q "ro.mk.device=$MK_BUILD");
+    if (adb shell cat /system/build.prop | grep -q "ro.kylin.device=$KYLIN_BUILD");
     then
         adb push $OUT/boot.img /cache/
         for i in $OUT/system/lib/modules/*;
@@ -1381,7 +1381,7 @@ function installboot()
         adb shell chmod 644 /system/lib/modules/*
         echo "Installation complete."
     else
-        echo "The connected device does not appear to be $MK_BUILD, run away!"
+        echo "The connected device does not appear to be $KYLIN_BUILD, run away!"
     fi
 }
 
@@ -1408,13 +1408,13 @@ function installrecovery()
     sleep 1
     adb wait-for-online shell mount /system 2>&1 >> /dev/null
     adb wait-for-online remount
-    if (adb shell cat /system/build.prop | grep -q "ro.mk.device=$MK_BUILD");
+    if (adb shell cat /system/build.prop | grep -q "ro.kylin.device=$KYLIN_BUILD");
     then
         adb push $OUT/recovery.img /cache/
         adb shell dd if=/cache/recovery.img of=$PARTITION
         echo "Installation complete."
     else
-        echo "The connected device does not appear to be $MK_BUILD, run away!"
+        echo "The connected device does not appear to be $KYLIN_BUILD, run away!"
     fi
 }
 
@@ -1437,8 +1437,8 @@ function makerecipe() {
   if [ "$REPO_REMOTE" == "github" ]
   then
     pwd
-    mkremote
-    git push mkremote HEAD:refs/heads/'$1'
+    kylinremote
+    git push kylinremote HEAD:refs/heads/'$1'
   fi
   '
 
@@ -1447,12 +1447,12 @@ function makerecipe() {
   cd ..
 }
 
-function mkgerrit() {
+function kylingerrit() {
     if [ $# -eq 0 ]; then
         $FUNCNAME help
         return 1
     fi
-    local user=`git config --get review.review.mfunz.com.username`
+    local user=`git config --get review.review.kylinos.com.username`
     local review=`git config --get remote.github.review`
     local project=`git config --get remote.github.projectname`
     local command=$1
@@ -1488,7 +1488,7 @@ EOF
             case $1 in
                 __cmg_*) echo "For internal use only." ;;
                 changes|for)
-                    if [ "$FUNCNAME" = "mkgerrit" ]; then
+                    if [ "$FUNCNAME" = "kylingerrit" ]; then
                         echo "'$FUNCNAME $1' is deprecated."
                     fi
                     ;;
@@ -1581,7 +1581,7 @@ EOF
                 $local_branch:refs/for/$remote_branch || return 1
             ;;
         changes|for)
-            if [ "$FUNCNAME" = "mkgerrit" ]; then
+            if [ "$FUNCNAME" = "kylingerrit" ]; then
                 echo >&2 "'$FUNCNAME $command' is deprecated."
             fi
             ;;
@@ -1680,15 +1680,15 @@ EOF
     esac
 }
 
-function mkrebase() {
+function kylinrebase() {
     local repo=$1
     local refs=$2
     local pwd="$(pwd)"
     local dir="$(gettop)/$repo"
 
     if [ -z $repo ] || [ -z $refs ]; then
-        echo "MoKee OpenSource Gerrit Rebase Usage: "
-        echo "      mkrebase <path to project> <patch IDs on Gerrit>"
+        echo "KyLin OS Gerrit Rebase Usage: "
+        echo "      kylinrebase <path to project> <patch IDs on Gerrit>"
         echo "      The patch IDs appear on the Gerrit commands that are offered."
         echo "      They consist on a series of numbers and slashes, after the text"
         echo "      refs/changes. For example, the ID in the following command is 26/8126/2"
@@ -1709,7 +1709,7 @@ function mkrebase() {
     echo "Bringing it up to date..."
     repo sync .
     echo "Fetching change..."
-    git fetch "http://review.mfunz.com/p/$repo" "refs/changes/$refs" && git cherry-pick FETCH_HEAD
+    git fetch "http://review.kylinos.com/p/$repo" "refs/changes/$refs" && git cherry-pick FETCH_HEAD
     if [ "$?" != "0" ]; then
         echo "Error cherry-picking. Not uploading!"
         return
@@ -1732,7 +1732,7 @@ function mka() {
     esac
 }
 
-function mkka() {
+function kylinka() {
     if [ ! -z "$1" ]; then
         for i in "$@"; do
             case $i in
@@ -1788,7 +1788,7 @@ function dopush()
         echo "Device Found."
     fi
 
-    if (adb shell cat /system/build.prop | grep -q "ro.mk.device=$MK_BUILD");
+    if (adb shell cat /system/build.prop | grep -q "ro.kylin.device=$KYLIN_BUILD");
     then
     adb root &> /dev/null
     sleep 0.3
@@ -1830,14 +1830,14 @@ function dopush()
     rm -f $OUT/.log
     return 0
     else
-        echo "The connected device does not appear to be $MK_BUILD, run away!"
+        echo "The connected device does not appear to be $KYLIN_BUILD, run away!"
     fi
 }
 
 alias mmp='dopush mm'
 alias mmmp='dopush mmm'
 alias mkap='dopush mka'
-alias mkkap='dopush mkka'
+alias kylinkap='dopush kylinka'
 
 function repopick() {
     T=$(gettop)

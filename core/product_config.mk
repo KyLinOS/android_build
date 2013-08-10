@@ -185,16 +185,16 @@ ifneq ($(strip $(TARGET_BUILD_APPS)),)
 all_product_configs := $(call get-product-makefiles,\
     $(SRC_TARGET_DIR)/product/AndroidProducts.mk)
 else
-  ifneq ($(MK_BUILD),)
-    all_product_configs := $(shell ls device/*/$(MK_BUILD)/mokee.mk)
+  ifneq ($(KYLIN_BUILD),)
+    all_product_configs := $(shell ls device/*/$(KYLIN_BUILD)/kylin.mk)
   else
     # Read in all of the product definitions specified by the AndroidProducts.mk
     # files in the tree.
     all_product_configs := $(get-all-product-makefiles)
-  endif # MK_BUILD
+  endif # KYLIN_BUILD
 endif
 
-ifeq ($(MK_BUILD),)
+ifeq ($(KYLIN_BUILD),)
 # Find the product config makefile for the current product.
 # all_product_configs consists items like:
 # <product_name>:<path_to_the_product_makefile>

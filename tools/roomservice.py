@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (C) 2012-2013, The MoKee OpenSource Project
+# Copyright (C) 2012-2013, The KyLinOS OpenSource Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ except:
     device = product
 
 if not depsonly:
-    print("Device %s not found. Attempting to retrieve device repository from MoKee OpenSource github (http://github.com/MoKee)." % device)
+    print("Device %s not found. Attempting to retrieve device repository from KyLin OS Github (http://github.com/KyLinOS)." % device)
 
 repositories = []
 
@@ -71,7 +71,7 @@ def add_auth(githubreq):
 
 page = 1
 while not depsonly:
-    githubreq = urllib.request.Request("https://api.github.com/users/MoKee/repos?per_page=200&page=%d" % page)
+    githubreq = urllib.request.Request("https://api.github.com/users/KyLinOS/repos?per_page=200&page=%d" % page)
     add_auth(githubreq)
     result = json.loads(urllib.request.urlopen(githubreq).read().decode())
     if len(result) == 0:
@@ -174,7 +174,7 @@ def add_to_manifest(repositories, fallback_branch = None):
             continue
 
         print('Adding dependency: %s -> %s' % (repo_name, repo_target))
-        project = ElementTree.Element("project", attrib = { "path": repo_target, "name": "%s" % repo_name, "remote": "mokee" })
+        project = ElementTree.Element("project", attrib = { "path": repo_target, "name": "%s" % repo_name, "remote": "kylin" })
 
         if 'branch' in repository:
             project.set('revision',repository['branch'])
@@ -199,7 +199,7 @@ def add_to_manifest(repositories, fallback_branch = None):
 
 def fetch_dependencies(repo_path, fallback_branch = None):
     print('Looking for dependencies')
-    dependencies_path = repo_path + '/mk.dependencies'
+    dependencies_path = repo_path + '/kylin.dependencies'
     syncable_repos = []
 
     if os.path.exists(dependencies_path):
@@ -208,7 +208,7 @@ def fetch_dependencies(repo_path, fallback_branch = None):
         fetch_list = []
 
         for dependency in dependencies:
-            if not is_in_manifest("%s" % dependency['repository']):
+            if not is_in_manifest("KyLinOS/%s" % dependency['repository']):
                 fetch_list.append(dependency)
                 syncable_repos.append(dependency['target_path'])
 
@@ -288,4 +288,4 @@ else:
             print("Done")
             sys.exit()
 
-print("Repository for %s not found in the MoKee OpenSource Gerrit repository list. If this is in error, you may need to manually add it to your local_manifests/roomservice.xml." % device)
+print("Repository for %s not found in the KyLin OS Github repository list. If this is in error, you may need to manually add it to your local_manifests/roomservice.xml." % device)

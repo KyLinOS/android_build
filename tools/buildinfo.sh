@@ -42,6 +42,6 @@ echo "ro.build.description=$PRIVATE_BUILD_DESC"
 echo "ro.build.fingerprint=$BUILD_FINGERPRINT"
 echo "ro.build.characteristics=$TARGET_AAPT_CHARACTERISTICS"
 
-echo "ro.mk.device=$MK_DEVICE"
+echo "ro.kylin.device=$KYLIN_DEVICE"
 
 echo "# end build properties"
