@@ -73,7 +73,7 @@ then
    exit 0
 elif [ ! -d "$OUT_DIR" ]
 then
-   kldir -p $OUT_DIR
+   mkdir -p $OUT_DIR
 fi 
 
 # we don't allow scrollback buffer

@@ -1353,20 +1353,20 @@ endif
 	$(hide) # Create Release, Experimental and Nightly folder Start
 
 ifdef KYLIN_BUILD_PATH
-	$(hide) kldir -p $(KYLIN_BUILD_PATH)
+	$(hide) mkdir -p $(KYLIN_BUILD_PATH)
   ifeq "RELEASE" "$(KYLIN_BUILDTYPE)"
-	$(hide) kldir -p $(KYLIN_BUILD_PATH)/Release
-	$(hide) kldir -p $(KYLIN_BUILD_PATH)/Release/$(KYLIN_BUILD)
+	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/Release
+	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/Release/$(KYLIN_BUILD)
 	$(hide) cp $(KYLIN_TARGET_PACKAGE) $(KYLIN_BUILD_PATH)/Release/$(KYLIN_BUILD)
   endif
   ifeq "EXPERIMENTAL" "$(KYLIN_BUILDTYPE)"
-	$(hide) kldir -p $(KYLIN_BUILD_PATH)/Experimental
-	$(hide) kldir -p $(KYLIN_BUILD_PATH)/Experimental/$(KYLIN_BUILD)
+	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/Experimental
+	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/Experimental/$(KYLIN_BUILD)
 	$(hide) cp $(KYLIN_TARGET_PACKAGE) $(KYLIN_BUILD_PATH)/Experimental/$(KYLIN_BUILD)
   endif
   ifeq "NIGHTLY" "$(KYLIN_BUILDTYPE)"
-	$(hide) kldir -p $(KYLIN_BUILD_PATH)/Nightly
-	$(hide) kldir -p $(KYLIN_BUILD_PATH)/Nightly/$(KYLIN_BUILD)
+	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/Nightly
+	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/Nightly/$(KYLIN_BUILD)
 	$(hide) cp $(KYLIN_TARGET_PACKAGE) $(KYLIN_BUILD_PATH)/Nightly/$(KYLIN_BUILD)
   endif
 endif
