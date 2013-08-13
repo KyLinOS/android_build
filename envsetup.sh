@@ -14,13 +14,13 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - jgrep:   Greps on all local Java files.
 - resgrep: Greps on all local res/*.xml files.
 - godir:   Go to the directory containing a file.
-- kylinremote: Add git remote for KyLin OS Gerrit Review.
-- kylingerrit: A Git wrapper that fetches/pushes patch from/to KyLin OS Gerrit Review.
-- kylinrebase: Rebase a Gerrit change and push it again.
+- klremote: Add git remote for KyLin OS Gerrit Review.
+- klgerrit: A Git wrapper that fetches/pushes patch from/to KyLin OS Gerrit Review.
+- klrebase: Rebase a Gerrit change and push it again.
 - aospremote: Add git remote for matching AOSP repository.
 - mka:      Builds using SCHED_BATCH on all processors.
 - mkap:     Builds the module(s) using mka and pushes them to the device.
-- kylinka:     Cleans and builds using mka.
+- klka:     Cleans and builds using mka.
 - reposync: Parallel repo sync using ionice and SCHED_BATCH.
 - repopick: Utility to fetch changes from Gerrit.
 - installboot: Installs a boot.img to the connected device.
@@ -1296,9 +1296,9 @@ function godir () {
     cd $T/$pathname
 }
 
-function kylinremote()
+function klremote()
 {
-    git remote rm kylinremote 2> /dev/null
+    git remote rm klremote 2> /dev/null
     if [ ! -d .git ]
     then
         echo .git directory not found. Please run this from the root directory of the Android repository you wish to set up.
@@ -1316,13 +1316,13 @@ function kylinremote()
     KYLINUSER=`git config --get review.review.kylinos.com.username`
     if [ -z "$KYLINUSER" ]
     then
-        git remote add kylinremote ssh://review.kylinos.com:29418/$GERRIT_REMOTE
+        git remote add klremote ssh://review.kylinos.com:29418/$GERRIT_REMOTE
     else
-        git remote add kylinremote ssh://$KYLINUSER@review.kylinos.com:29418/$GERRIT_REMOTE
+        git remote add klremote ssh://$KYLINUSER@review.kylinos.com:29418/$GERRIT_REMOTE
     fi
-    echo You can now push to "kylinremote".
+    echo You can now push to "klremote".
 }
-export -f kylinremote
+export -f klremote
 
 function aospremote()
 {
@@ -1437,8 +1437,8 @@ function makerecipe() {
   if [ "$REPO_REMOTE" == "github" ]
   then
     pwd
-    kylinremote
-    git push kylinremote HEAD:refs/heads/'$1'
+    klremote
+    git push klremote HEAD:refs/heads/'$1'
   fi
   '
 
@@ -1447,7 +1447,7 @@ function makerecipe() {
   cd ..
 }
 
-function kylingerrit() {
+function klgerrit() {
     if [ $# -eq 0 ]; then
         $FUNCNAME help
         return 1
@@ -1488,7 +1488,7 @@ EOF
             case $1 in
                 __cmg_*) echo "For internal use only." ;;
                 changes|for)
-                    if [ "$FUNCNAME" = "kylingerrit" ]; then
+                    if [ "$FUNCNAME" = "klgerrit" ]; then
                         echo "'$FUNCNAME $1' is deprecated."
                     fi
                     ;;
@@ -1581,7 +1581,7 @@ EOF
                 $local_branch:refs/for/$remote_branch || return 1
             ;;
         changes|for)
-            if [ "$FUNCNAME" = "kylingerrit" ]; then
+            if [ "$FUNCNAME" = "klgerrit" ]; then
                 echo >&2 "'$FUNCNAME $command' is deprecated."
             fi
             ;;
@@ -1680,7 +1680,7 @@ EOF
     esac
 }
 
-function kylinrebase() {
+function klrebase() {
     local repo=$1
     local refs=$2
     local pwd="$(pwd)"
@@ -1688,7 +1688,7 @@ function kylinrebase() {
 
     if [ -z $repo ] || [ -z $refs ]; then
         echo "KyLin OS Gerrit Rebase Usage: "
-        echo "      kylinrebase <path to project> <patch IDs on Gerrit>"
+        echo "      klrebase <path to project> <patch IDs on Gerrit>"
         echo "      The patch IDs appear on the Gerrit commands that are offered."
         echo "      They consist on a series of numbers and slashes, after the text"
         echo "      refs/changes. For example, the ID in the following command is 26/8126/2"
@@ -1732,7 +1732,7 @@ function mka() {
     esac
 }
 
-function kylinka() {
+function klka() {
     if [ ! -z "$1" ]; then
         for i in "$@"; do
             case $i in
@@ -1837,7 +1837,7 @@ function dopush()
 alias mmp='dopush mm'
 alias mmmp='dopush mmm'
 alias mkap='dopush mka'
-alias kylinkap='dopush kylinka'
+alias klkap='dopush klka'
 
 function repopick() {
     T=$(gettop)
