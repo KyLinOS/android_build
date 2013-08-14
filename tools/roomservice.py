@@ -170,11 +170,12 @@ def add_to_manifest(repositories, fallback_branch = None):
         repo_name = repository['repository']
         repo_target = repository['target_path']
         if exists_in_tree(lm, repo_name):
-            print('%s already exists' % (repo_name))
+            print('KyLinOS/%s already exists' % (repo_name))
             continue
 
-        print('Adding dependency: %s -> %s' % (repo_name, repo_target))
-        project = ElementTree.Element("project", attrib = { "path": repo_target, "name": "%s" % repo_name, "remote": "kylin" })
+        print('Adding dependency: KyLinOS/%s -> %s' % (repo_name, repo_target))
+        project = ElementTree.Element("project", attrib = { "path": repo_target,
+            "remote": "kylin", "name": "KyLinOS/%s" % repo_name })
 
         if 'branch' in repository:
             project.set('revision',repository['branch'])
@@ -183,9 +184,6 @@ def add_to_manifest(repositories, fallback_branch = None):
             project.set('revision', fallback_branch)
         else:
             print("Using default branch for %s" % repo_name)
-
-        if 'remote' in repository:
-            project.set('remote',repository['remote'])
 
         lm.append(project)
 
@@ -208,7 +206,7 @@ def fetch_dependencies(repo_path, fallback_branch = None):
         fetch_list = []
 
         for dependency in dependencies:
-            if not is_in_manifest("/%s" % dependency['repository']):
+            if not is_in_manifest("KyLinOS/%s" % dependency['repository']):
                 fetch_list.append(dependency)
                 syncable_repos.append(dependency['target_path'])
 
