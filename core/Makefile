@@ -1348,6 +1348,22 @@ ifneq ($(TARGET_CUSTOM_RELEASETOOL),)
 endif
 	$(hide) ln -f $(INTERNAL_OTA_PACKAGE_TARGET) $(KYLIN_TARGET_PACKAGE)
 	$(hide) $(MD5SUM) $(KYLIN_TARGET_PACKAGE) > $(KYLIN_TARGET_PACKAGE).md5sum
+	@echo -e ${CL_MAG}"******************************************************************"${CL_RST}
+	@echo -e ${CL_MAG}"*         __                          __                         *"${CL_RST}
+	@echo -e ${CL_MAG}"*        /\__\                       /\__\                       *"${CL_RST}
+	@echo -e ${CL_MAG}"*       /:/  /         __           /:/  /                       *"${CL_RST}
+	@echo -e ${CL_MAG}"*      /:/  /___      /\__\        /:/  /    ___       __ __     *"${CL_RST}
+	@echo -e ${CL_MAG}"*     /:/__//\__\    /:/  /__     /:/  /    /\  \     /::\  \    *"${CL_RST}
+	@echo -e ${CL_MAG}"*    /::\  /:/  /   /:/  //\__\  /:/  /     \:\  \   /:/\:\  \   *"${CL_RST}
+	@echo -e ${CL_MAG}"*   /:/\:\/:/  /   /:/__//:/  / /:/  /      /::\__\ /:/  \:\  \  *"${CL_RST}
+	@echo -e ${CL_MAG}"*  /:/  \::/  /    |:\  /:/  / /:/__/    __/:/\/__//:/  / \:\__\ *"${CL_RST}
+	@echo -e ${CL_MAG}"* /:/  / |:|  |  __ \:\/:/  /  \:\  \   /\/:/  /  /:/  /  |:|  | *"${CL_RST}
+	@echo -e ${CL_MAG}"* \/__/  |:|  | /\ \ \::/  /    \:\  \  \::/__/   \/__/  /:/  /  *"${CL_RST}
+	@echo -e ${CL_MAG}"*        /:/  / \:\ \/:/  /      \:\  \  \:\__\         /:/  /   *"${CL_RST}
+	@echo -e ${CL_MAG}"*       /:/  /   \:\/:/  /        \:\__\  \/__/        /:/  /    *"${CL_RST}
+	@echo -e ${CL_MAG}"*       \/__/     \__/__/          \/__/               \/__/     *"${CL_RST}
+	@echo -e ${CL_MAG}"*                                                                *"${CL_RST}
+	@echo -e ${CL_MAG}"******************************************************************"${CL_RST}
 	@echo -e ${CL_CYN}"Package Complete: $(KYLIN_TARGET_PACKAGE)"${CL_RST}
 	
 	$(hide) # Create Release, Experimental and Nightly folder Start
