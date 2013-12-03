@@ -2,7 +2,7 @@ function hmm() {
 cat <<EOF
 Invoke ". build/envsetup.sh" from your shell to add the following functions to your environment:
 - lunch:   lunch <product_name>-<build_variant>
-- tapas:   tapas [<App1> <App2> ...] [arm|x86|mips] [eng|userdebug|user]
+- tapas:   tapas [<App1> <App2> ...] [arm|x86|mips|armv5] [eng|userdebug|user]
 - croot:   Changes directory to the top of the tree.
 - cout:    Changes directory to out.
 - m:       Makes from the top of the tree.
@@ -10,14 +10,18 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - mmp:     Builds all of the modules in the current directory and pushes them to the device.
 - mmm:     Builds all of the modules in the supplied directories.
 - mmmp:    Builds all of the modules in the supplied directories and pushes them to the device.
+- mma:     Builds all of the modules in the current directory, and their dependencies.
+- mmma:    Builds all of the modules in the supplied directories, and their dependencies.
 - cgrep:   Greps on all local C/C++ files.
 - jgrep:   Greps on all local Java files.
 - resgrep: Greps on all local res/*.xml files.
 - godir:   Go to the directory containing a file.
-- klremote: Add git remote for KyLin OS Gerrit Review.
-- klgerrit: A Git wrapper that fetches/pushes patch from/to KyLin OS Gerrit Review.
+- klremote: Add git remote for KylinMod Gerrit Review.
+- klgerrit: A Git wrapper that fetches/pushes patch from/to KylinMod Gerrit Review.
 - klrebase: Rebase a Gerrit change and push it again.
 - aospremote: Add git remote for matching AOSP repository.
+- cafremote: Add git remote for matching CodeAurora repository.
+- cmremote: Add git remote for matching CyanogenMod repository,
 - mka:      Builds using SCHED_BATCH on all processors.
 - mkap:     Builds the module(s) using mka and pushes them to the device.
 - klka:     Cleans and builds using mka.
@@ -25,6 +29,7 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - repopick: Utility to fetch changes from Gerrit.
 - installboot: Installs a boot.img to the connected device.
 - installrecovery: Installs a recovery.img to the connected device.
+- clog:     Tool to generate changelog.
 
 Look at the source to view more functions. The complete list is:
 EOF
@@ -45,7 +50,7 @@ function get_abs_build_var()
         echo "Couldn't locate the top of the tree.  Try setting TOP." >&2
         return
     fi
-    (cd $T; CALLED_FROM_SETUP=true BUILD_SYSTEM=build/core \
+    (\cd $T; CALLED_FROM_SETUP=true BUILD_SYSTEM=build/core \
       make --no-print-directory -C "$T" -f build/core/config.mk dumpvar-abs-$1)
 }
 
@@ -72,10 +77,23 @@ function check_product()
 
     if (echo -n $1 | grep -q -e "^kylin_") ; then
        KYLIN_BUILD=$(echo -n $1 | sed -e 's/^kylin_//g')
+       export BUILD_NUMBER=$((date +%s%N ; echo $KYLIN_BUILD; hostname) | openssl sha1 | sed -e 's/.*=//g; s/ //g' | cut -c1-10)
     else
        KYLIN_BUILD=
     fi
     export KYLIN_BUILD
+
+    if [ ! -z "$KYLIN_RELEASE" ] ; then
+        export KYLIN_BUILDTYPE=RELEASE
+    elif [ ! -z "$KYLIN_NIGHTLY" ] ; then
+        export KYLIN_BUILDTYPE=NIGHTLY
+    elif [ ! -z "$KYLIN_EXPERIMENTAL" ] ; then
+        export KYLIN_BUILDTYPE=EXPERIMENTAL
+    elif [ "`hostname`" == "kylin" ] ; then
+        export KYLIN_BUILDTYPE=EXPERIMENTAL
+    else
+        export KYLIN_BUILDTYPE=UNOFFICIAL
+    fi
 
     CALLED_FROM_SETUP=true BUILD_SYSTEM=build/core \
         TARGET_PRODUCT=$1 \
@@ -138,15 +156,19 @@ function setpaths()
     prebuiltdir=$(getprebuilt)
     gccprebuiltdir=$(get_abs_build_var ANDROID_GCC_PREBUILTS)
 
+    # defined in core/config.mk
+    targetgccversion=$(get_build_var TARGET_GCC_VERSION)
+    export TARGET_GCC_VERSION=$targetgccversion
+
     # The gcc toolchain does not exists for windows/cygwin. In this case, do not reference it.
     export ANDROID_EABI_TOOLCHAIN=
     local ARCH=$(get_build_var TARGET_ARCH)
     case $ARCH in
-        x86) toolchaindir=x86/i686-linux-android-4.6/bin
+        x86) toolchaindir=x86/i686-linux-android-$targetgccversion/bin
             ;;
-        arm) toolchaindir=arm/arm-linux-androideabi-4.6/bin
+        arm) toolchaindir=arm/arm-linux-androideabi-$targetgccversion/bin
             ;;
-        mips) toolchaindir=mips/mipsel-linux-android-4.6/bin
+        mips) toolchaindir=mips/mipsel-linux-android-$targetgccversion/bin
             ;;
         *)
             echo "Can't find toolchain for unknown architecture: $ARCH"
@@ -160,7 +182,7 @@ function setpaths()
     unset ARM_EABI_TOOLCHAIN ARM_EABI_TOOLCHAIN_PATH
     case $ARCH in
         arm)
-            toolchaindir=arm/arm-eabi-4.6/bin
+            toolchaindir=arm/arm-eabi-$targetgccversion/bin
             if [ -d "$gccprebuiltdir/$toolchaindir" ]; then
                  export ARM_EABI_TOOLCHAIN="$gccprebuiltdir/$toolchaindir"
                  ARM_EABI_TOOLCHAIN_PATH=":$gccprebuiltdir/$toolchaindir"
@@ -175,7 +197,7 @@ function setpaths()
 
     export ANDROID_TOOLCHAIN=$ANDROID_EABI_TOOLCHAIN
     export ANDROID_QTOOLS=$T/development/emulator/qtools
-    export ANDROID_DEV_SCRIPTS=$T/development/scripts
+    export ANDROID_DEV_SCRIPTS=$T/development/scripts:$T/prebuilts/devtools/tools
     export ANDROID_BUILD_PATHS=$(get_build_var ANDROID_BUILD_PATHS):$ANDROID_QTOOLS:$ANDROID_TOOLCHAIN$ARM_EABI_TOOLCHAIN_PATH$CODE_REVIEWS:$ANDROID_DEV_SCRIPTS:
     export PATH=$ANDROID_BUILD_PATHS$PATH
 
@@ -256,29 +278,19 @@ function settitle()
     fi
 }
 
-function addcompletions()
+function check_bash_version()
 {
     # Keep us from trying to run in something that isn't bash.
     if [ -z "${BASH_VERSION}" ]; then
-        return
+        return 1
     fi
 
     # Keep us from trying to run in bash that's too old.
     if [ "${BASH_VERSINFO[0]}" -lt 4 ] ; then
-        return
+        return 2
     fi
 
-    local T dir f
-
-    dirs="sdk/bash_completion vendor/kylin/bash_completion"
-    for dir in $dirs; do
-    if [ -d ${dir} ]; then
-        for f in `/bin/ls ${dir}/[a-z]*.bash 2> /dev/null`; do
-            echo "including $f"
-            . $f
-        done
-    fi
-    done
+    return 0
 }
 
 function choosetype()
@@ -457,6 +469,10 @@ function add_lunch_combo()
 }
 
 # add the default one here
+# add_lunch_combo aosp_arm-eng
+# add_lunch_combo aosp_x86-eng
+# add_lunch_combo aosp_mips-eng
+# add_lunch_combo vbox_x86-eng
 
 function print_lunch_menu()
 {
@@ -492,7 +508,7 @@ function brunch()
 {
     breakfast $*
     if [ $? -eq 0 ]; then
-        time mka bacon -j8
+        time mka bacon
     else
         echo "No such item in brunch menu. Try 'breakfast'"
         return 1
@@ -539,7 +555,7 @@ function lunch()
         answer=$1
     else
         print_lunch_menu
-        echo -n "Which would you like? [full-eng] "
+        echo -n "Which would you like? [aosp_arm-eng] "
         read answer
     fi
 
@@ -547,7 +563,7 @@ function lunch()
 
     if [ -z "$answer" ]
     then
-        selection=full-eng
+        selection=aosp_arm-eng
     elif (echo -n $answer | grep -q -e "^[0-9][0-9]*$")
     then
         if [ $answer -le ${#LUNCH_MENU_CHOICES[@]} ]
@@ -572,7 +588,7 @@ function lunch()
     check_product $product
     if [ $? -ne 0 ]
     then
-        # if we can't find a product, try to grab it off the KyLin OS github
+        # if we can't find a product, try to grab it off the KylinMod github
         T=$(gettop)
         pushd $T > /dev/null
         build/tools/roomservice.py $product
@@ -634,9 +650,9 @@ complete -F _lunch lunch
 # Run tapas with one ore more app names (from LOCAL_PACKAGE_NAME)
 function tapas()
 {
-    local arch=$(echo -n $(echo $* | xargs -n 1 echo | \grep -E '^(arm|x86|mips)$'))
+    local arch=$(echo -n $(echo $* | xargs -n 1 echo | \grep -E '^(arm|x86|mips|armv5)$'))
     local variant=$(echo -n $(echo $* | xargs -n 1 echo | \grep -E '^(user|userdebug|eng)$'))
-    local apps=$(echo -n $(echo $* | xargs -n 1 echo | \grep -E -v '^(user|userdebug|eng|arm|x86|mips)$'))
+    local apps=$(echo -n $(echo $* | xargs -n 1 echo | \grep -E -v '^(user|userdebug|eng|arm|x86|mips|armv5)$'))
 
     if [ $(echo $arch | wc -w) -gt 1 ]; then
         echo "tapas: Error: Multiple build archs supplied: $arch"
@@ -651,6 +667,7 @@ function tapas()
     case $arch in
       x86)   product=full_x86;;
       mips)  product=full_mips;;
+      armv5) product=generic_armv5;;
     esac
     if [ -z "$variant" ]; then
         variant=eng
@@ -693,13 +710,20 @@ function eat()
         adb root
         sleep 1
         adb wait-for-device
+        # CWM command
         cat << EOF > /tmp/command
 --sideload
 EOF
-        if adb push /tmp/command /cache/recovery/ ; then
+        # TWRP command
+        cat << EOF > /tmp/openrecoveryscript
+sideload
+EOF
+        if adb push /tmp/command /cache/recovery/ && adb push /tmp/openrecoveryscript /cache/recovery/; then
             echo "Rebooting into recovery for sideload installation"
             adb reboot recovery
+            adb kill-server
             adb wait-for-sideload
+            echo "Device back online, trying to sideload"
             adb sideload $ZIPPATH
         fi
         rm /tmp/command
@@ -731,16 +755,13 @@ function gettop
             # faked up with symlink names.
             PWD= /bin/pwd
         else
-            # We redirect cd to /dev/null in case it's aliased to
-            # a command that prints something as a side-effect
-            # (like pushd)
             local HERE=$PWD
             T=
             while [ \( ! \( -f $TOPFILE \) \) -a \( $PWD != "/" \) ]; do
-                cd .. > /dev/null
+                \cd ..
                 T=`PWD= /bin/pwd`
             done
-            cd $HERE > /dev/null
+            \cd $HERE
             if [ -f "$T/$TOPFILE" ]; then
                 echo $T
             fi
@@ -752,7 +773,7 @@ function m()
 {
     T=$(gettop)
     if [ "$T" ]; then
-        make -C $T $@
+        make -C $T -f build/core/main.mk $@
     else
         echo "Couldn't locate the top of the tree.  Try setting TOP."
     fi
@@ -761,21 +782,18 @@ function m()
 function findmakefile()
 {
     TOPFILE=build/core/envsetup.mk
-    # We redirect cd to /dev/null in case it's aliased to
-    # a command that prints something as a side-effect
-    # (like pushd)
     local HERE=$PWD
     T=
     while [ \( ! \( -f $TOPFILE \) \) -a \( $PWD != "/" \) ]; do
         T=`PWD= /bin/pwd`
         if [ -f "$T/Android.mk" ]; then
             echo $T/Android.mk
-            cd $HERE > /dev/null
+            \cd $HERE
             return
         fi
-        cd .. > /dev/null
+        \cd ..
     done
-    cd $HERE > /dev/null
+    \cd $HERE
 }
 
 function mm()
@@ -802,7 +820,7 @@ function mm()
         elif [ ! "$M" ]; then
             echo "Couldn't locate a makefile from the current directory."
         else
-            ONE_SHOT_MAKEFILE=$M $MM_MAKE -C $T all_modules $@
+            ONE_SHOT_MAKEFILE=$M $MM_MAKE -C $T -f build/core/main.mk all_modules $@
         fi
     fi
 }
@@ -825,7 +843,7 @@ function mmm()
             fi
             DIR=`echo $DIR | sed -e 's/:.*//' -e 's:/$::'`
             if [ -f $DIR/Android.mk ]; then
-                TO_CHOP=`(cd -P -- $T && pwd -P) | wc -c | tr -d ' '`
+                TO_CHOP=`(\cd -P -- $T && pwd -P) | wc -c | tr -d ' '`
                 TO_CHOP=`expr $TO_CHOP + 1`
                 START=`PWD= /bin/pwd`
                 MFILE=`echo $START | cut -c${TO_CHOP}-`
@@ -852,17 +870,66 @@ function mmm()
                 fi
             fi
         done
-        ONE_SHOT_MAKEFILE="$MAKEFILE" $MMM_MAKE -C $T $DASH_ARGS $MODULES $ARGS
+        ONE_SHOT_MAKEFILE="$MAKEFILE" $MMM_MAKE -C $T -f build/core/main.mk $DASH_ARGS $MODULES $ARGS
     else
         echo "Couldn't locate the top of the tree.  Try setting TOP."
     fi
+}
+
+function mma()
+{
+  if [ -f build/core/envsetup.mk -a -f Makefile ]; then
+    make $@
+  else
+    T=$(gettop)
+    if [ ! "$T" ]; then
+      echo "Couldn't locate the top of the tree.  Try setting TOP."
+    fi
+    local MY_PWD=`PWD= /bin/pwd|sed 's:'$T'/::'`
+    make -C $T -f build/core/main.mk $@ all_modules BUILD_MODULES_IN_PATHS="$MY_PWD"
+  fi
+}
+
+function mmma()
+{
+  T=$(gettop)
+  if [ "$T" ]; then
+    local DASH_ARGS=$(echo "$@" | awk -v RS=" " -v ORS=" " '/^-.*$/')
+    local DIRS=$(echo "$@" | awk -v RS=" " -v ORS=" " '/^[^-].*$/')
+    local MY_PWD=`PWD= /bin/pwd`
+    if [ "$MY_PWD" = "$T" ]; then
+      MY_PWD=
+    else
+      MY_PWD=`echo $MY_PWD|sed 's:'$T'/::'`
+    fi
+    local DIR=
+    local MODULE_PATHS=
+    local ARGS=
+    for DIR in $DIRS ; do
+      if [ -d $DIR ]; then
+        if [ "$MY_PWD" = "" ]; then
+          MODULE_PATHS="$MODULE_PATHS $DIR"
+        else
+          MODULE_PATHS="$MODULE_PATHS $MY_PWD/$DIR"
+        fi
+      else
+        case $DIR in
+          showcommands | snod | dist | incrementaljavac) ARGS="$ARGS $DIR";;
+          *) echo "Couldn't find directory $DIR"; return 1;;
+        esac
+      fi
+    done
+    make -C $T -f build/core/main.mk $DASH_ARGS $ARGS all_modules BUILD_MODULES_IN_PATHS="$MODULE_PATHS"
+  else
+    echo "Couldn't locate the top of the tree.  Try setting TOP."
+  fi
 }
 
 function croot()
 {
     T=$(gettop)
     if [ "$T" ]; then
-        cd $(gettop)
+        \cd $(gettop)
     else
         echo "Couldn't locate the top of the tree.  Try setting TOP."
     fi
@@ -880,20 +947,17 @@ function cout()
 function cproj()
 {
     TOPFILE=build/core/envsetup.mk
-    # We redirect cd to /dev/null in case it's aliased to
-    # a command that prints something as a side-effect
-    # (like pushd)
     local HERE=$PWD
     T=
     while [ \( ! \( -f $TOPFILE \) \) -a \( $PWD != "/" \) ]; do
         T=$PWD
         if [ -f "$T/Android.mk" ]; then
-            cd $T
+            \cd $T
             return
         fi
-        cd .. > /dev/null
+        \cd ..
     done
-    cd $HERE > /dev/null
+    \cd $HERE
     echo "can't find Android.mk"
 }
 
@@ -912,7 +976,45 @@ function pid()
 # to the usual ANR traces file
 function systemstack()
 {
-    adb shell echo '""' '>>' /data/anr/traces.txt && adb shell chmod 776 /data/anr/traces.txt && adb shell kill -3 $(pid system_server)
+    stacks system_server
+}
+
+function stacks()
+{
+    if [[ $1 =~ ^[0-9]+$ ]] ; then
+        local PID="$1"
+    elif [ "$1" ] ; then
+        local PID=$(pid $1)
+    else
+        echo "usage: stacks [pid|process name]"
+    fi
+
+    if [ "$PID" ] ; then
+        local TRACES=/data/anr/traces.txt
+        local ORIG=/data/anr/traces.orig
+        local TMP=/data/anr/traces.tmp
+
+        # Keep original traces to avoid clobbering
+        adb shell mv $TRACES $ORIG
+
+        # Make sure we have a usable file
+        adb shell touch $TRACES
+        adb shell chmod 666 $TRACES
+
+        # Dump stacks and wait for dump to finish
+        adb shell kill -3 $PID
+        adb shell notify $TRACES
+
+        # Restore original stacks, and show current output
+        adb shell mv $TRACES $TMP
+        adb shell mv $ORIG $TRACES
+        adb shell cat $TMP | less -S
+    fi
+}
+
+function gdbwrapper()
+{
+    $ANDROID_TOOLCHAIN/$GDB -x "$@"
 }
 
 function gdbclient()
@@ -946,13 +1048,24 @@ function gdbclient()
            PORT=":5039"
        fi
 
-       local PID
-       local PROG="$3"
-       if [ "$PROG" ] ; then
-           if [[ "$PROG" =~ ^[0-9]+$ ]] ; then
-               PID="$3"
-           else
+       local PID="$3"
+       if [ "$PID" ] ; then
+           if [[ ! "$PID" =~ ^[0-9]+$ ]] ; then
                PID=`pid $3`
+               if [[ ! "$PID" =~ ^[0-9]+$ ]] ; then
+                   # that likely didn't work because of returning multiple processes
+                   # try again, filtering by root processes (don't contain colon)
+                   PID=`adb shell ps | grep $3 | grep -v ":" | awk '{print $2}'`
+                   if [[ ! "$PID" =~ ^[0-9]+$ ]]
+                   then
+                       echo "Couldn't resolve '$3' to single PID"
+                       return 1
+                   else
+                       echo ""
+                       echo "WARNING: multiple processes matching '$3' observed, using root process"
+                       echo ""
+                   fi
+               fi
            fi
            adb forward "tcp$PORT" "tcp$PORT"
            adb shell gdbserver $PORT --attach $PID &
@@ -962,7 +1075,7 @@ function gdbclient()
                echo "If you haven't done so already, do this first on the device:"
                echo "    gdbserver $PORT /system/bin/$EXE"
                    echo " or"
-               echo "    gdbserver $PORT --attach $PID"
+               echo "    gdbserver $PORT --attach <PID>"
                echo ""
        fi
 
@@ -971,7 +1084,7 @@ function gdbclient()
        echo >>"$OUT_ROOT/gdbclient.cmds" "target remote $PORT"
        echo >>"$OUT_ROOT/gdbclient.cmds" ""
 
-       $ANDROID_TOOLCHAIN/$GDB -x "$OUT_ROOT/gdbclient.cmds" "$OUT_EXE_SYMBOLS/$EXE"
+       gdbwrapper "$OUT_ROOT/gdbclient.cmds" "$OUT_EXE_SYMBOLS/$EXE"
   else
        echo "Unable to determine build system output dir."
    fi
@@ -1012,6 +1125,16 @@ function cgrep()
 function resgrep()
 {
     for dir in `find . -name .repo -prune -o -name .git -prune -o -name res -type d`; do find $dir -type f -name '*\.xml' -print0 | xargs -0 grep --color -n "$@"; done;
+}
+
+function mangrep()
+{
+    find . -name .repo -prune -o -name .git -prune -o -path ./out -prune -o -type f -name 'AndroidManifest.xml' -print0 | xargs -0 grep --color -n "$@"
+}
+
+function sepgrep()
+{
+    find . -name .repo -prune -o -name .git -prune -o -path ./out -prune -o -name sepolicy -type d -print0 | xargs -0 grep --color -n -r --exclude-dir=\.git "$@"
 }
 
 case `uname -s` in
@@ -1233,7 +1356,7 @@ function smoketest()
         return
     fi
 
-    (cd "$T" && make SmokeTest SmokeTestApp) &&
+    (\cd "$T" && mmm tests/SmokeTest) &&
       adb uninstall com.android.smoketest > /dev/null &&
       adb uninstall com.android.smoketest.tests > /dev/null &&
       adb install $ANDROID_PRODUCT_OUT/data/app/SmokeTestApp.apk &&
@@ -1260,7 +1383,7 @@ function godir () {
     T=$(gettop)
     if [[ ! -f $T/filelist ]]; then
         echo -n "Creating index..."
-        (cd $T; find . -wholename ./out -prune -o -wholename ./.repo -prune -o -type f > filelist)
+        (\cd $T; find . -wholename ./out -prune -o -wholename ./.repo -prune -o -type f > filelist)
         echo " Done"
         echo ""
     fi
@@ -1293,7 +1416,7 @@ function godir () {
     else
         pathname=${lines[0]}
     fi
-    cd $T/$pathname
+    \cd $T/$pathname
 }
 
 function klremote()
@@ -1303,15 +1426,11 @@ function klremote()
     then
         echo .git directory not found. Please run this from the root directory of the Android repository you wish to set up.
     fi
-    GERRIT_REMOTE=$(cat .git/config  | grep git://github.com | awk '{ print $NF }' | sed s#git://github.com/##g)
+    GERRIT_REMOTE=`cat .git/config | grep projectname | cut -d"=" -f2 | sed -e 's/^[ \t]*//'`
     if [ -z "$GERRIT_REMOTE" ]
     then
-        GERRIT_REMOTE=$(cat .git/config  | grep http://github.com | awk '{ print $NF }' | sed s#http://github.com/##g)
-        if [ -z "$GERRIT_REMOTE" ]
-        then
-          echo Unable to set up the git remote, are you in the root of the repo?
-          return 0
-        fi
+        echo Unable to set up the git remote, are you in the root of the repo?
+        return 0
     fi
     KYLINUSER=`git config --get review.review.kylinos.com.username`
     if [ -z "$KYLINUSER" ]
@@ -1331,7 +1450,7 @@ function aospremote()
     then
         echo .git directory not found. Please run this from the root directory of the Android repository you wish to set up.
     fi
-    PROJECT=`pwd | sed s#$ANDROID_BUILD_TOP/##g`
+    PROJECT=`pwd -P | sed s#$ANDROID_BUILD_TOP/##g`
     if (echo $PROJECT | grep -qv "^device")
     then
         PFX="platform/"
@@ -1340,6 +1459,37 @@ function aospremote()
     echo "Remote 'aosp' created"
 }
 export -f aospremote
+
+function cafremote()
+{
+    git remote rm caf 2> /dev/null
+    if [ ! -d .git ]
+    then
+        echo .git directory not found. Please run this from the root directory of the Android repository you wish to set up.
+    fi
+    PROJECT=`pwd -P | sed s#$ANDROID_BUILD_TOP/##g`
+    if (echo $PROJECT | grep -qv "^device")
+    then
+        PFX="platform/"
+    fi
+    git remote add caf git://codeaurora.org/$PFX$PROJECT
+    echo "Remote 'caf' created"
+}
+export -f cafremote
+
+function cmremote()
+{
+    git remote rm cm 2> /dev/null
+    if [ ! -d .git ]
+    then
+        echo .git directory not found. Please run this from the root directory of the Android repository you wish to set up.
+    fi
+    PROJECT=`cat .git/config | grep "projectname" | rev | cut -d'/' -f1 | rev`
+    git remote add cm https://github.com/CyanogenMod/${PROJECT}.git
+    echo "Remote 'cm' created"
+}
+export -f cmremote
+
 
 function installboot()
 {
@@ -1357,10 +1507,17 @@ function installboot()
     PARTITION_TYPE=`grep "^\/boot" $OUT/recovery/root/etc/recovery.fstab | awk {'print $2'}`
     if [ -z "$PARTITION" ];
     then
-        echo "Unable to determine boot partition."
-        return 1
+        # Try for RECOVERY_FSTAB_VERSION = 2
+        PARTITION=`grep "[[:space:]]\/boot[[:space:]]" $OUT/recovery/root/etc/recovery.fstab | awk {'print $1'}`
+        PARTITION_TYPE=`grep "[[:space:]]\/boot[[:space:]]" $OUT/recovery/root/etc/recovery.fstab | awk {'print $3'}`
+        if [ -z "$PARTITION" ];
+        then
+            echo "Unable to determine boot partition."
+            return 1
+        fi
     fi
     adb start-server
+    adb wait-for-online
     adb root
     sleep 1
     adb wait-for-online shell mount /system 2>&1 > /dev/null
@@ -1400,10 +1557,17 @@ function installrecovery()
     PARTITION=`grep "^\/recovery" $OUT/recovery/root/etc/recovery.fstab | awk {'print $3'}`
     if [ -z "$PARTITION" ];
     then
-        echo "Unable to determine recovery partition."
-        return 1
+        # Try for RECOVERY_FSTAB_VERSION = 2
+        PARTITION=`grep "[[:space:]]\/recovery[[:space:]]" $OUT/recovery/root/etc/recovery.fstab | awk {'print $1'}`
+        PARTITION_TYPE=`grep "[[:space:]]\/recovery[[:space:]]" $OUT/recovery/root/etc/recovery.fstab | awk {'print $3'}`
+        if [ -z "$PARTITION" ];
+        then
+            echo "Unable to determine recovery partition."
+            return 1
+        fi
     fi
     adb start-server
+    adb wait-for-online
     adb root
     sleep 1
     adb wait-for-online shell mount /system 2>&1 >> /dev/null
@@ -1790,8 +1954,17 @@ function dopush()
 
     if (adb shell cat /system/build.prop | grep -q "ro.kylin.device=$KYLIN_BUILD");
     then
+    # retrieve IP and PORT info if we're using a TCP connection
+    TCPIPPORT=$(adb devices | egrep '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+[^0-9]+' \
+        | head -1 | awk '{print $1}')
     adb root &> /dev/null
     sleep 0.3
+    if [ -n "$TCPIPPORT" ]
+    then
+        # adb root just killed our connection
+        # so reconnect...
+        adb connect "$TCPIPPORT"
+    fi
     adb wait-for-device &> /dev/null
     sleep 0.3
     adb remount &> /dev/null
@@ -1877,6 +2050,19 @@ function set_java_home() {
     fi
 }
 
+# Print colored exit condition
+function pez {
+    "$@"
+    local retval=$?
+    if [ $retval -ne 0 ]
+    then
+        echo -e "\e[0;31mFAILURE\e[00m"
+    else
+        echo -e "\e[0;32mSUCCESS\e[00m"
+    fi
+    return $retval
+}
+
 if [ "x$SHELL" != "x/bin/bash" ]; then
     case `ps -o command -p $$` in
         *bash*)
@@ -1898,9 +2084,20 @@ unset f
 
 # Changelog Tool
 function clog() {
-    ./clog
+    ./build/clog $1
 }
 
-addcompletions
+# Add completions
+check_bash_version && {
+    dirs="sdk/bash_completion vendor/kylin/bash_completion"
+    for dir in $dirs; do
+    if [ -d ${dir} ]; then
+        for f in `/bin/ls ${dir}/[a-z]*.bash 2> /dev/null`; do
+            echo "including $f"
+            . $f
+        done
+    fi
+    done
+}
 
 export ANDROID_BUILD_TOP=$(gettop)

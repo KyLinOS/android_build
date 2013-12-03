@@ -62,6 +62,8 @@ parser.add_argument('-a', '--abandon-first', action='store_true', help='before c
 parser.add_argument('-b', '--auto-branch', action='store_true', help='shortcut to "--start-branch auto --abandon-first --ignore-missing"')
 parser.add_argument('-q', '--quiet', action='store_true', help='print as little as possible')
 parser.add_argument('-v', '--verbose', action='store_true', help='print extra information to aid in debug')
+parser.add_argument('-f', '--force', action='store_true', help='force cherry pick even if commit has been merged')
+parser.add_argument('-p', '--pull', action='store_true', help='execute pull instead of cherry-pick')
 args = parser.parse_args()
 if args.start_branch == None and args.abandon_first:
     parser.error('if --abandon-first is set, you must also give the branch name with --start-branch')
@@ -156,7 +158,6 @@ if args.abandon_first:
             local_branches = re.split('\s*,\s*', matchObj.group(1))
             if any(args.start_branch[0] in s for s in local_branches):
                 needs_abandon = True
-                break
 
     if needs_abandon:
         # Perform the abandon only if the branch already exists
@@ -166,6 +167,18 @@ if args.abandon_first:
         execute_cmd(cmd)
         if not args.quiet:
             print('')
+
+# Get the list of projects that repo knows about
+#   - convert the project name to a project path
+project_name_to_path = {}
+plist = subprocess.Popen([repo_bin,"list"], stdout=subprocess.PIPE)
+project_path = None
+while(True):
+    pline = plist.stdout.readline().rstrip()
+    if not pline:
+        break
+    ppaths = re.split('\s*:\s*', pline.decode())
+    project_name_to_path[ppaths[1]] = ppaths[0]
 
 # Iterate through the requested change numbers
 for change in args.change_number:
@@ -206,6 +219,7 @@ for change in args.change_number:
     date_fluff       = '.000000000'
     project_name     = data['project']
     change_number    = data['_number']
+    status           = data['status']
     current_revision = data['revisions'][data['current_revision']]
     patch_number     = current_revision['_number']
     fetch_url        = current_revision['fetch']['http']['url']
@@ -218,29 +232,24 @@ for change in args.change_number:
     committer_date   = current_revision['commit']['committer']['date'].replace(date_fluff, '')
     subject          = current_revision['commit']['subject']
 
-    # Get the list of projects that repo knows about
-    #   - convert the project name to a project path
-    plist = subprocess.Popen([repo_bin,"list"], stdout=subprocess.PIPE)
-    while(True):
-        pline = plist.stdout.readline().rstrip()
-        if not pline:
-            break
-        ppaths = re.split('\s*:\s*', pline.decode())
-        if ppaths[1] == project_name:
-            project_path = ppaths[0]
-            break
-    if 'project_path' not in locals():
-        sys.stderr.write('ERROR: Could not determine the project path for project %s\n' % project_name)
-        sys.exit(1)
-
-    # Check that the project path exists
-    if not os.path.isdir(project_path):
-        if args.ignore_missing:
-            print('WARNING: Skipping %d since there is no project directory: %s\n' % (change_number, project_path))
-            continue;
+    # Check if commit has already been merged and exit if it has, unless -f is specified
+    if status == "MERGED":
+        if args.force:
+            print("!! Force-picking a merged commit !!\n")
         else:
-            sys.stderr.write('ERROR: For %d, there is no project directory: %s\n' % (change_number, project_path))
+            print("Commit already merged. Skipping the cherry pick.\nUse -f to force this pick.")
             sys.exit(1)
+
+    # Convert the project name to a project path
+    #   - check that the project path exists
+    if project_name in project_name_to_path:
+        project_path = project_name_to_path[project_name];
+    elif args.ignore_missing:
+        print('WARNING: Skipping %d since there is no project directory for: %s\n' % (change_number, project_name))
+        continue;
+    else:
+        sys.stderr.write('ERROR: For %d, could not determine the project path for project %s\n' % (change_number, project_name))
+        sys.exit(1)
 
     # If --start-branch is given, create the branch (more than once per path is okay; repo ignores gracefully)
     if args.start_branch:
@@ -258,7 +267,10 @@ for change in args.change_number:
     # Try fetching from GitHub first
     if args.verbose:
        print('Trying to fetch the change from GitHub')
-    cmd = 'cd %s && git fetch github %s' % (project_path, fetch_ref)
+    if args.pull:
+      cmd = 'cd %s && git pull --no-edit github %s' % (project_path, fetch_ref)
+    else:
+      cmd = 'cd %s && git fetch github %s' % (project_path, fetch_ref)
     execute_cmd(cmd)
     # Check if it worked
     FETCH_HEAD = '%s/.git/FETCH_HEAD' % project_path
@@ -266,11 +278,15 @@ for change in args.change_number:
         # That didn't work, fetch from Gerrit instead
         if args.verbose:
           print('Fetching from GitHub didn\'t work, trying to fetch the change from Gerrit')
-        cmd = 'cd %s && git fetch %s %s' % (project_path, fetch_url, fetch_ref)
+        if args.pull:
+          cmd = 'cd %s && git pull --no-edit %s %s' % (project_path, fetch_url, fetch_ref)
+        else:
+          cmd = 'cd %s && git fetch %s %s' % (project_path, fetch_url, fetch_ref)
         execute_cmd(cmd)
     # Perform the cherry-pick
     cmd = 'cd %s && git cherry-pick FETCH_HEAD' % (project_path)
-    execute_cmd(cmd)
+    if not args.pull:
+      execute_cmd(cmd)
     if not args.quiet:
         print('')
 

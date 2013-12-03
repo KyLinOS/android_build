@@ -51,7 +51,7 @@ except:
     device = product
 
 if not depsonly:
-    print("Device %s not found. Attempting to retrieve device repository from KyLin OS Github (http://github.com/KyLinOS)." % device)
+    print("Device %s not found. Attempting to retrieve device repository from KylinMod Github (http://github.com/KyLinOS)." % device)
 
 repositories = []
 
@@ -109,7 +109,7 @@ def get_default_revision():
     m = ElementTree.parse(".repo/manifest.xml")
     d = m.findall('default')[0]
     r = d.get('revision')
-    return r.split('/')[-1]
+    return r.replace('refs/heads/', '').replace('refs/tags/', '')
 
 def get_from_manifest(devicename):
     try:
@@ -173,9 +173,8 @@ def add_to_manifest(repositories, fallback_branch = None):
             print('KyLinOS/%s already exists' % (repo_name))
             continue
 
-        print('Adding dependency: KyLinOS/%s -> %s' % (repo_name, repo_target))
-        project = ElementTree.Element("project", attrib = { "path": repo_target,
-            "remote": "kylin", "name": "KyLinOS/%s" % repo_name })
+        print('Adding dependency: %s -> %s' % (repo_name, repo_target))
+        project = ElementTree.Element("project", attrib = { "path": repo_target, "name": "KyLinOS/%s" % repo_name, "remote": "kylin" })
 
         if 'branch' in repository:
             project.set('revision',repository['branch'])
@@ -184,7 +183,6 @@ def add_to_manifest(repositories, fallback_branch = None):
             project.set('revision', fallback_branch)
         else:
             print("Using default branch for %s" % repo_name)
-
         lm.append(project)
 
     indent(lm, 0)
@@ -286,4 +284,4 @@ else:
             print("Done")
             sys.exit()
 
-print("Repository for %s not found in the KyLin OS Github repository list. If this is in error, you may need to manually add it to your local_manifests/roomservice.xml." % device)
+print("Repository for %s not found in the KylinMod Github repository list. If this is in error, you may need to manually add it to your local_manifests/roomservice.xml." % device)

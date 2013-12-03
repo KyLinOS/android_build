@@ -113,13 +113,35 @@ BUILD_VERSION_TAGS += dev-keys
 endif
 BUILD_VERSION_TAGS := $(subst $(space),$(comma),$(sort $(BUILD_VERSION_TAGS)))
 
+# If the final fingerprint should be different than what was used by the build system,
+# we can allow that too.
+ifeq ($(TARGET_VENDOR_PRODUCT_NAME),)
+TARGET_VENDOR_PRODUCT_NAME := $(TARGET_PRODUCT)
+endif
+
+ifeq ($(TARGET_VENDOR_DEVICE_NAME),)
+TARGET_VENDOR_DEVICE_NAME := $(TARGET_DEVICE)
+endif
+
+ifeq ($(TARGET_VENDOR_RELEASE_BUILD_ID),)
+TARGET_VENDOR_RELEASE_BUILD_ID := $(BUILD_NUMBER)
+endif
+
+ifeq ($(TARGET_VENDOR_BUILD_ID),)
+TARGET_VENDOR_BUILD_ID := $(BUILD_ID)
+endif
+
+ifeq ($(TARGET_VENDOR_PLATFORM_VERSION),)
+TARGET_VENDOR_PLATFORM_VERSION := $(PLATFORM_VERSION)
+endif
+
 # A human-readable string that descibes this build in detail.
-build_desc := $(TARGET_PRODUCT)-$(TARGET_BUILD_VARIANT) $(PLATFORM_VERSION) $(BUILD_ID) $(BUILD_NUMBER) $(BUILD_VERSION_TAGS)
+build_desc := $(TARGET_VENDOR_PRODUCT_NAME)-$(TARGET_BUILD_VARIANT) $(TARGET_VENDOR_PLATFORM_VERSION) $(TARGET_VENDOR_BUILD_ID) $(TARGET_VENDOR_RELEASE_BUILD_ID) $(BUILD_VERSION_TAGS)
 $(INSTALLED_BUILD_PROP_TARGET): PRIVATE_BUILD_DESC := $(build_desc)
 
 # The string used to uniquely identify this build;  used by the OTA server.
 ifeq (,$(strip $(BUILD_FINGERPRINT)))
-  BUILD_FINGERPRINT := $(PRODUCT_BRAND)/$(TARGET_PRODUCT)/$(TARGET_DEVICE):$(PLATFORM_VERSION)/$(BUILD_ID)/$(BUILD_NUMBER):$(TARGET_BUILD_VARIANT)/$(BUILD_VERSION_TAGS)
+  BUILD_FINGERPRINT := $(PRODUCT_BRAND)/$(TARGET_VENDOR_PRODUCT_NAME)/$(TARGET_VENDOR_DEVICE_NAME):$(TARGET_VENDOR_PLATFORM_VERSION)/$(TARGET_VENDOR_BUILD_ID)/$(TARGET_VENDOR_RELEASE_BUILD_ID):$(TARGET_BUILD_VARIANT)/$(BUILD_VERSION_TAGS)
 endif
 ifneq ($(words $(BUILD_FINGERPRINT)),1)
   $(error BUILD_FINGERPRINT cannot contain spaces: "$(BUILD_FINGERPRINT)")
@@ -132,9 +154,9 @@ ifeq ($(TARGET_BUILD_VARIANT),user)
 
   # Dev. branches should have DISPLAY_BUILD_NUMBER set
   ifeq "true" "$(DISPLAY_BUILD_NUMBER)"
-    BUILD_DISPLAY_ID := $(BUILD_ID).$(BUILD_NUMBER)
+    BUILD_DISPLAY_ID := $(TARGET_VENDOR_BUILD_ID).$(BUILD_NUMBER)
   else
-    BUILD_DISPLAY_ID := $(BUILD_ID)
+    BUILD_DISPLAY_ID := $(TARGET_VENDOR_BUILD_ID)
   endif
 else
   # Non-user builds should show detailed build information
@@ -167,13 +189,20 @@ $(if $(product_property_overrides_locale_region),,$(word 2, $(call default-local
 endef
 
 BUILDINFO_SH := build/tools/buildinfo.sh
-$(INSTALLED_BUILD_PROP_TARGET): $(BUILDINFO_SH) $(INTERNAL_BUILD_ID_MAKEFILE) $(BUILD_SYSTEM)/version_defaults.mk $(wildcard $(TARGET_DEVICE_DIR)/system.prop)
+
+ifdef TARGET_SYSTEM_PROP
+system_prop_file := $(TARGET_SYSTEM_PROP)
+else
+system_prop_file := $(wildcard $(TARGET_DEVICE_DIR)/system.prop)
+endif
+
+$(INSTALLED_BUILD_PROP_TARGET): $(BUILDINFO_SH) $(INTERNAL_BUILD_ID_MAKEFILE) $(BUILD_SYSTEM)/version_defaults.mk $(system_prop_file)
 	@echo Target buildinfo: $@
 	@mkdir -p $(dir $@)
 	$(hide) TARGET_BUILD_TYPE="$(TARGET_BUILD_VARIANT)" \
-			TARGET_DEVICE="$(TARGET_DEVICE)" \
+			TARGET_DEVICE="$(TARGET_VENDOR_DEVICE_NAME)" \
 			KYLIN_DEVICE="$(TARGET_DEVICE)" \
-			PRODUCT_NAME="$(TARGET_PRODUCT)" \
+			PRODUCT_NAME="$(TARGET_VENDOR_PRODUCT_NAME)" \
 			PRODUCT_BRAND="$(PRODUCT_BRAND)" \
 			PRODUCT_DEFAULT_LANGUAGE="$(call default-locale-language,$(PRODUCT_LOCALES))" \
 			PRODUCT_DEFAULT_REGION="$(call default-locale-region,$(PRODUCT_LOCALES))" \
@@ -181,13 +210,7 @@ $(INSTALLED_BUILD_PROP_TARGET): $(BUILDINFO_SH) $(INTERNAL_BUILD_ID_MAKEFILE) $(
 			PRODUCT_MODEL="$(PRODUCT_MODEL)" \
 			PRODUCT_MANUFACTURER="$(PRODUCT_MANUFACTURER)" \
 			PRIVATE_BUILD_DESC="$(PRIVATE_BUILD_DESC)" \
-			BUILD_ID="$(BUILD_ID)" \
-			BUILD_DISPLAY_ID="$(BUILD_DISPLAY_ID)" \
-			BUILD_NUMBER="$(BUILD_NUMBER)" \
-			PLATFORM_VERSION="$(PLATFORM_VERSION)" \
-			PLATFORM_SDK_VERSION="$(PLATFORM_SDK_VERSION)" \
-			PLATFORM_VERSION_CODENAME="$(PLATFORM_VERSION_CODENAME)" \
-			BUILD_VERSION_TAGS="$(BUILD_VERSION_TAGS)" \
+			BUILD_ID="$(TARGET_VENDOR_BUILD_ID)" \
 			TARGET_BOOTLOADER_BOARD_NAME="$(TARGET_BOOTLOADER_BOARD_NAME)" \
 			BUILD_FINGERPRINT="$(BUILD_FINGERPRINT)" \
 			TARGET_BOARD_PLATFORM="$(TARGET_BOARD_PLATFORM)" \
@@ -195,9 +218,15 @@ $(INSTALLED_BUILD_PROP_TARGET): $(BUILDINFO_SH) $(INTERNAL_BUILD_ID_MAKEFILE) $(
 			TARGET_CPU_ABI2="$(TARGET_CPU_ABI2)" \
 			TARGET_AAPT_CHARACTERISTICS="$(TARGET_AAPT_CHARACTERISTICS)" \
 			$(PRODUCT_BUILD_PROP_OVERRIDES) \
+			BUILD_DISPLAY_ID="$(BUILD_DISPLAY_ID)" \
+			BUILD_NUMBER="$(BUILD_NUMBER)" \
+			PLATFORM_VERSION="$(TARGET_VENDOR_PLATFORM_VERSION)" \
+			PLATFORM_SDK_VERSION="$(PLATFORM_SDK_VERSION)" \
+			PLATFORM_VERSION_CODENAME="$(PLATFORM_VERSION_CODENAME)" \
+			BUILD_VERSION_TAGS="$(BUILD_VERSION_TAGS)" \
 	        bash $(BUILDINFO_SH) > $@
-	$(hide) if [ -f $(TARGET_DEVICE_DIR)/system.prop ]; then \
-	          cat $(TARGET_DEVICE_DIR)/system.prop >> $@; \
+	$(hide) if [ -f "$(system_prop_file)" ]; then \
+	          cat $(system_prop_file) >> $@; \
 	        fi
 	$(if $(ADDITIONAL_BUILD_PROPERTIES), \
 		$(hide) echo >> $@; \
@@ -593,16 +622,23 @@ INTERNAL_USERIMAGES_DEPS := $(MKYAFFS2)
 endif
 INTERNAL_USERIMAGES_BINARY_PATHS := $(sort $(dir $(INTERNAL_USERIMAGES_DEPS)))
 
+SELINUX_FC := $(TARGET_ROOT_OUT)/file_contexts
+INTERNAL_USERIMAGES_DEPS += $(SELINUX_FC)
+
 # $(1): the path of the output dictionary file
+# $(2): additional "key=value" pairs to append to the dictionary file.
 define generate-userimage-prop-dictionary
 $(if $(INTERNAL_USERIMAGES_EXT_VARIANT),$(hide) echo "fs_type=$(INTERNAL_USERIMAGES_EXT_VARIANT)" >> $(1))
 $(if $(BOARD_SYSTEMIMAGE_PARTITION_SIZE),$(hide) echo "system_size=$(BOARD_SYSTEMIMAGE_PARTITION_SIZE)" >> $(1))
 $(if $(BOARD_USERDATAIMAGE_PARTITION_SIZE),$(hide) echo "userdata_size=$(BOARD_USERDATAIMAGE_PARTITION_SIZE)" >> $(1))
 $(if $(BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE),$(hide) echo "cache_fs_type=$(BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE)" >> $(1))
 $(if $(BOARD_CACHEIMAGE_PARTITION_SIZE),$(hide) echo "cache_size=$(BOARD_CACHEIMAGE_PARTITION_SIZE)" >> $(1))
+$(if $(BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE),$(hide) echo "vendor_fs_type=$(BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE)" >> $(1))
+$(if $(BOARD_VENDORIMAGE_PARTITION_SIZE),$(hide) echo "vendor_size=$(BOARD_VENDORIMAGE_PARTITION_SIZE)" >> $(1))
 $(if $(INTERNAL_USERIMAGES_SPARSE_EXT_FLAG),$(hide) echo "extfs_sparse_flag=$(INTERNAL_USERIMAGES_SPARSE_EXT_FLAG)" >> $(1))
 $(if $(mkyaffs2_extra_flags),$(hide) echo "mkyaffs2_extra_flags=$(mkyaffs2_extra_flags)" >> $(1))
-$(if $(filter true, $(strip $(HAVE_SELINUX))), echo "selinux_fc=$(TARGET_ROOT_OUT)/file_contexts" >> $(1))
+$(hide) echo "selinux_fc=$(SELINUX_FC)" >> $(1)
+$(if $(2),$(hide) $(foreach kv,$(2),echo "$(kv)" >> $(1);))
 endef
 
 # -----------------------------------------------------------------
@@ -619,7 +655,7 @@ utilities: $(INTERNAL_UTILITY_FILES)
 # Recovery image
 
 # If neither TARGET_NO_KERNEL nor TARGET_NO_RECOVERY are true
-ifeq (,$(filter true, $(TARGET_NO_KERNEL) $(TARGET_NO_RECOVERY) $(BUILD_TINY_ANDROID)))
+ifeq (,$(filter true, $(TARGET_NO_KERNEL) $(TARGET_NO_RECOVERY)))
 
 INSTALLED_RECOVERYIMAGE_TARGET := $(PRODUCT_OUT)/recovery.img
 
@@ -846,12 +882,8 @@ $(INSTALLED_FILES_FILE): $(FULL_SYSTEMIMAGE_DEPS)
 
 .PHONY: installed-file-list
 installed-file-list: $(INSTALLED_FILES_FILE)
-ifneq ($(filter sdk win_sdk,$(MAKECMDGOALS)),)
-$(call dist-for-goals, sdk win_sdk, $(INSTALLED_FILES_FILE))
-endif
-ifneq ($(filter sdk_addon,$(MAKECMDGOALS)),)
-$(call dist-for-goals, sdk_addon, $(INSTALLED_FILES_FILE))
-endif
+
+$(call dist-for-goals, sdk win_sdk sdk_addon, $(INSTALLED_FILES_FILE))
 
 systemimage_intermediates := \
     $(call intermediates-dir-for,PACKAGING,systemimage)
@@ -861,7 +893,7 @@ BUILT_SYSTEMIMAGE := $(systemimage_intermediates)/system.img
 define build-systemimage-target
   @echo "Target system fs image: $(1)"
   @mkdir -p $(dir $(1)) $(systemimage_intermediates) && rm -rf $(systemimage_intermediates)/system_image_info.txt
-  $(call generate-userimage-prop-dictionary, $(systemimage_intermediates)/system_image_info.txt)
+  $(call generate-userimage-prop-dictionary, $(systemimage_intermediates)/system_image_info.txt, skip_fsck=true)
   $(hide) PATH=$(foreach p,$(INTERNAL_USERIMAGES_BINARY_PATHS),$(p):)$$PATH \
       ./build/tools/releasetools/build_image.py \
       $(TARGET_OUT) $(systemimage_intermediates)/system_image_info.txt $(1)
@@ -1017,6 +1049,15 @@ INTERNAL_USERDATAIMAGE_FILES += \
     $(filter $(TARGET_OUT_DATA)/%,$(tests_MODULES))
 endif
 
+# Don't build userdata.img if it's extfs but no partition size
+skip_userdata.img :=
+ifdef INTERNAL_USERIMAGES_EXT_VARIANT
+ifndef BOARD_USERDATAIMAGE_PARTITION_SIZE
+skip_userdata.img := true
+endif
+endif
+
+ifneq ($(skip_userdata.img),true)
 userdataimage_intermediates := \
     $(call intermediates-dir-for,PACKAGING,userdata)
 BUILT_USERDATAIMAGE_TARGET := $(PRODUCT_OUT)/userdata.img
@@ -1025,7 +1066,7 @@ define build-userdataimage-target
   $(call pretty,"Target userdata fs image: $(INSTALLED_USERDATAIMAGE_TARGET)")
   @mkdir -p $(TARGET_OUT_DATA)
   @mkdir -p $(userdataimage_intermediates) && rm -rf $(userdataimage_intermediates)/userdata_image_info.txt
-  $(call generate-userimage-prop-dictionary, $(userdataimage_intermediates)/userdata_image_info.txt)
+  $(call generate-userimage-prop-dictionary, $(userdataimage_intermediates)/userdata_image_info.txt, skip_fsck=true)
   $(hide) PATH=$(foreach p,$(INTERNAL_USERIMAGES_BINARY_PATHS),$(p):)$$PATH \
       ./build/tools/releasetools/build_image.py \
       $(TARGET_OUT_DATA) $(userdataimage_intermediates)/userdata_image_info.txt $(INSTALLED_USERDATAIMAGE_TARGET)
@@ -1041,6 +1082,9 @@ $(INSTALLED_USERDATAIMAGE_TARGET): $(INTERNAL_USERIMAGES_DEPS) \
 .PHONY: userdataimage-nodeps
 userdataimage-nodeps: | $(INTERNAL_USERIMAGES_DEPS)
 	$(build-userdataimage-target)
+
+endif # not skip_userdata.img
+skip_userdata.img :=
 
 #######
 ## data partition tarball
@@ -1077,7 +1121,7 @@ define build-cacheimage-target
   $(call pretty,"Target cache fs image: $(INSTALLED_CACHEIMAGE_TARGET)")
   @mkdir -p $(TARGET_OUT_CACHE)
   @mkdir -p $(cacheimage_intermediates) && rm -rf $(cacheimage_intermediates)/cache_image_info.txt
-  $(call generate-userimage-prop-dictionary, $(cacheimage_intermediates)/cache_image_info.txt)
+  $(call generate-userimage-prop-dictionary, $(cacheimage_intermediates)/cache_image_info.txt, skip_fsck=true)
   $(hide) PATH=$(foreach p,$(INTERNAL_USERIMAGES_BINARY_PATHS),$(p):)$$PATH \
       ./build/tools/releasetools/build_image.py \
       $(TARGET_OUT_CACHE) $(cacheimage_intermediates)/cache_image_info.txt $(INSTALLED_CACHEIMAGE_TARGET)
@@ -1094,6 +1138,39 @@ cacheimage-nodeps: | $(INTERNAL_USERIMAGES_DEPS)
 	$(build-cacheimage-target)
 
 endif # BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE
+
+
+# -----------------------------------------------------------------
+# vendor partition image
+ifdef BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE
+INTERNAL_VENDORIMAGE_FILES := \
+    $(filter $(TARGET_OUT_VENDOR)/%,$(ALL_DEFAULT_INSTALLED_MODULES))
+
+vendorimage_intermediates := \
+    $(call intermediates-dir-for,PACKAGING,vendor)
+BUILT_VENDORIMAGE_TARGET := $(PRODUCT_OUT)/vendor.img
+
+define build-vendorimage-target
+  $(call pretty,"Target vendor fs image: $(INSTALLED_VENDORIMAGE_TARGET)")
+  @mkdir -p $(TARGET_OUT_VENDOR)
+  @mkdir -p $(vendorimage_intermediates) && rm -rf $(vendorimage_intermediates)/vendor_image_info.txt
+  $(call generate-userimage-prop-dictionary, $(vendorimage_intermediates)/vendor_image_info.txt, skip_fsck=true)
+  $(hide) PATH=$(foreach p,$(INTERNAL_USERIMAGES_BINARY_PATHS),$(p):)$$PATH \
+      ./build/tools/releasetools/build_image.py \
+      $(TARGET_OUT_VENDOR) $(vendorimage_intermediates)/vendor_image_info.txt $(INSTALLED_VENDORIMAGE_TARGET)
+  $(hide) $(call assert-max-image-size,$(INSTALLED_VENDORIMAGE_TARGET),$(BOARD_VENDORIMAGE_PARTITION_SIZE),yaffs)
+endef
+
+# We just build this directly to the install location.
+INSTALLED_VENDORIMAGE_TARGET := $(BUILT_VENDORIMAGE_TARGET)
+$(INSTALLED_VENDORIMAGE_TARGET): $(INTERNAL_USERIMAGES_DEPS) $(INTERNAL_VENDORIMAGE_FILES)
+	$(build-vendorimage-target)
+
+.PHONY: vendorimage-nodeps
+vendorimage-nodeps: | $(INTERNAL_USERIMAGES_DEPS)
+	$(build-vendorimage-target)
+
+endif # BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE
 
 # -----------------------------------------------------------------
 # bring in the installer image generation defines if necessary
@@ -1128,7 +1205,7 @@ OTATOOLS := $(DISTTOOLS) \
 otatools: $(OTATOOLS)
 
 
-UNPACKBOOTIMG :=  $(HOST_OUT_EXECUTABLES)/unpackbootimg
+UNPACKBOOTIMG :=  $(HOST_OUT_EXECUTABLES)/unpackbootimg$(HOST_EXECUTABLE_SUFFIX)
 
 .PHONY: unpackbootimg
 unpackbootimg: $(UNPACKBOOTIMG)
@@ -1169,6 +1246,7 @@ built_ota_tools := \
 $(BUILT_TARGET_FILES_PACKAGE): PRIVATE_OTA_TOOLS := $(built_ota_tools)
 
 $(BUILT_TARGET_FILES_PACKAGE): PRIVATE_RECOVERY_API_VERSION := $(RECOVERY_API_VERSION)
+$(BUILT_TARGET_FILES_PACKAGE): PRIVATE_RECOVERY_FSTAB_VERSION := $(RECOVERY_FSTAB_VERSION)
 
 ifeq ($(TARGET_RELEASETOOLS_EXTENSIONS),)
 # default to common dir for device vendor
@@ -1186,6 +1264,7 @@ $(BUILT_TARGET_FILES_PACKAGE): \
 		$(INSTALLED_SYSTEMIMAGE) \
 		$(INSTALLED_USERDATAIMAGE_TARGET) \
 		$(INSTALLED_CACHEIMAGE_TARGET) \
+		$(INSTALLED_VENDORIMAGE_TARGET) \
 		$(INSTALLED_ANDROID_INFO_TXT_TARGET) \
 		$(built_ota_tools) \
 		$(APKCERTS_FILE) \
@@ -1254,6 +1333,11 @@ endif
 	@# Contents of the data image
 	$(hide) $(call package_files-copy-root, \
 		$(TARGET_OUT_DATA),$(zip_root)/DATA)
+ifdef BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE
+	@# Contents of the vendor image
+	$(hide) $(call package_files-copy-root, \
+		$(TARGET_OUT_VENDOR),$(zip_root)/VENDOR)
+endif
 	@# Extra contents of the OTA package
 	$(hide) mkdir -p $(zip_root)/OTA/bin
 	$(hide) $(ACP) $(INSTALLED_ANDROID_INFO_TXT_TARGET) $(zip_root)/OTA/
@@ -1264,6 +1348,7 @@ endif
 	$(hide) $(ACP) $(APKCERTS_FILE) $(zip_root)/META/apkcerts.txt
 	$(hide)	echo "$(PRODUCT_OTA_PUBLIC_KEYS)" > $(zip_root)/META/otakeys.txt
 	$(hide) echo "recovery_api_version=$(PRIVATE_RECOVERY_API_VERSION)" > $(zip_root)/META/misc_info.txt
+	$(hide) echo "fstab_version=$(PRIVATE_RECOVERY_FSTAB_VERSION)" >> $(zip_root)/META/misc_info.txt
 ifdef BOARD_FLASH_BLOCK_SIZE
 	$(hide) echo "blocksize=$(BOARD_FLASH_BLOCK_SIZE)" >> $(zip_root)/META/misc_info.txt
 endif
@@ -1288,7 +1373,7 @@ endif
 	$(hide) zipinfo -1 $@ | awk 'BEGIN { FS="RECOVERY/RAMDISK/" } /^RECOVERY\/RAMDISK\// {print $$2}' | $(HOST_OUT_EXECUTABLES)/fs_config > $(zip_root)/META/recovery_filesystem_config.txt
 	$(hide) (cd $(zip_root) && zip -q ../$(notdir $@) META/*filesystem_config.txt)
 
-
+.PHONY: target-files-package
 target-files-package: $(BUILT_TARGET_FILES_PACKAGE)
 
 
@@ -1316,10 +1401,14 @@ else
     OTA_FROM_TARGET_SCRIPT := $(TARGET_RELEASETOOL_OTA_FROM_TARGET_SCRIPT)
 endif
 
+ifeq ($(WITH_GMS),true)
+    $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := false
+else
 ifneq ($(KYLIN_BUILD),)
     $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := true
 else
     $(INTERNAL_OTA_PACKAGE_TARGET): backuptool := false
+endif
 endif
 
 ifeq ($(TARGET_OTA_ASSERT_DEVICE),)
@@ -1329,6 +1418,7 @@ else
 endif
 
 $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE) $(DISTTOOLS)
+	@echo "$(OTA_FROM_TARGET_SCRIPT)" > $(PRODUCT_OUT)/ota_script_path
 	@echo -e ${CL_YLW}"Package OTA:"${CL_RST}" $@"
 	MKBOOTIMG=$(BOARD_CUSTOM_BOOTIMG_MK) \
 	$(OTA_FROM_TARGET_SCRIPT) -v \
@@ -1347,7 +1437,7 @@ ifneq ($(TARGET_CUSTOM_RELEASETOOL),)
 	$(error TARGET_CUSTOM_RELEASETOOL is deprecated)
 endif
 	$(hide) ln -f $(INTERNAL_OTA_PACKAGE_TARGET) $(KYLIN_TARGET_PACKAGE)
-	$(hide) $(MD5SUM) $(KYLIN_TARGET_PACKAGE) > $(KYLIN_TARGET_PACKAGE).md5sum
+	$(hide) $(MD5SUM) $(KYLIN_TARGET_PACKAGE) | cut -f1 -d' ' > $(KYLIN_TARGET_PACKAGE).md5sum
 	@echo -e ${CL_MAG}"******************************************************************"${CL_RST}
 	@echo -e ${CL_MAG}"*         __                          __                         *"${CL_RST}
 	@echo -e ${CL_MAG}"*        /\__\                       /\__\                       *"${CL_RST}
@@ -1367,24 +1457,12 @@ endif
 	@echo -e ${CL_CYN}"Package Complete: $(KYLIN_TARGET_PACKAGE)"${CL_RST}
 	
 	$(hide) # Create Release, Experimental and Nightly folder Start
+	
 
 ifdef KYLIN_BUILD_PATH
-	$(hide) mkdir -p $(KYLIN_BUILD_PATH)
-  ifeq "RELEASE" "$(KYLIN_BUILDTYPE)"
-	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/Release
-	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/Release/$(KYLIN_BUILD)
-	$(hide) cp $(KYLIN_TARGET_PACKAGE) $(KYLIN_BUILD_PATH)/Release/$(KYLIN_BUILD)
-  endif
-  ifeq "EXPERIMENTAL" "$(KYLIN_BUILDTYPE)"
-	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/Experimental
-	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/Experimental/$(KYLIN_BUILD)
-	$(hide) cp $(KYLIN_TARGET_PACKAGE) $(KYLIN_BUILD_PATH)/Experimental/$(KYLIN_BUILD)
-  endif
-  ifeq "NIGHTLY" "$(KYLIN_BUILDTYPE)"
-	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/Nightly
-	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/Nightly/$(KYLIN_BUILD)
-	$(hide) cp $(KYLIN_TARGET_PACKAGE) $(KYLIN_BUILD_PATH)/Nightly/$(KYLIN_BUILD)
-  endif
+	$(hide) mkdir -p $(KYLIN_BUILD_PATH)/$(KYLIN_BUILDTYPE)/$(KYLIN_BUILD)/md5
+	$(hide) cp $(KYLIN_TARGET_PACKAGE) $(KYLIN_BUILD_PATH)/$(KYLIN_BUILDTYPE)/$(KYLIN_BUILD)
+	$(hide) cp $(KYLIN_TARGET_PACKAGE).md5sum $(KYLIN_BUILD_PATH)/$(KYLIN_BUILDTYPE)/$(KYLIN_BUILD)/md5
 endif
 	$(hide) # Create Release, Experimental and Nightly folder End
 
@@ -1428,6 +1506,7 @@ endif    # TARGET_NO_KERNEL != true
 endif    # TARGET_DEVICE != generic*
 endif    # TARGET_PRODUCT != sdk
 
+ifdef is_tests_build
 # -----------------------------------------------------------------
 # A zip of the tests that are built when running "make tests".
 # This is very similar to BUILT_TARGET_FILES_PACKAGE, but we
@@ -1458,23 +1537,13 @@ $(BUILT_TESTS_ZIP_PACKAGE): \
 		$(TARGET_OUT_DATA),$(zip_root)/DATA)
 	$(hide) (cd $(zip_root) && zip -qry ../$(notdir $@) .)
 
-.PHONY: tests-zip-package
-tests-zip-package: $(BUILT_TESTS_ZIP_PACKAGE)
-
-# Target needed by tests build
-.PHONY: tests-build-target
-tests-build-target: $(BUILT_TESTS_ZIP_PACKAGE)
-
-ifneq (,$(filter $(MAKECMDGOALS),tests-build-target))
-  $(call dist-for-goals, tests-build-target, \
-          $(BUILT_TESTS_ZIP_PACKAGE))
-endif
-
 .PHONY: tests
 tests: $(BUILT_TESTS_ZIP_PACKAGE)
+
 ifneq (,$(filter tests, $(MAKECMDGOALS)))
-$(call dist-for-goals, tests, $(BUILT_TESTS_ZIP_PACKAGE))
+  $(call dist-for-goals, tests, $(BUILT_TESTS_ZIP_PACKAGE))
 endif
+endif # is_tests_build
 
 # -----------------------------------------------------------------
 # A zip of the symbols directory.  Keep the full paths to make it
@@ -1654,7 +1723,6 @@ deps := \
 	$(atree_dir)/sdk.atree \
 	$(sdk_tools_atree_files) \
 	$(HOST_OUT_EXECUTABLES)/atree \
-	$(ALL_HOST_INSTALLED_FILES) \
 	$(HOST_OUT_EXECUTABLES)/line_endings
 
 INTERNAL_SDK_TARGET := $(sdk_dir)/$(sdk_name).zip
